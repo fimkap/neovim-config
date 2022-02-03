@@ -56,6 +56,8 @@ Plug 'doums/darcula'
 Plug 'nvim-lua/plenary.nvim'
 Plug 'lewis6991/gitsigns.nvim'
 Plug 'nvim-treesitter/nvim-treesitter', {'do': ':TSUpdate'}
+Plug 'folke/trouble.nvim'
+Plug 'github/copilot.vim'
 " Plug 'chentau/marks.nvim'
 " Plug 'google/yapf', { 'rtp': 'plugins/vim', 'for': 'python' }
 " Plug 'tell-k/vim-autopep8'
@@ -103,6 +105,7 @@ colorscheme darcula
 set termguicolors
 
 lua <<EOF
+require("trouble").setup {}
 require('feline').setup()
 -- require'marks'.setup {
 --   -- whether to map keybinds or not. default true
@@ -181,8 +184,8 @@ lua <<EOF
       ['<Tab>'] = function(fallback)
         if cmp.visible() then
           cmp.select_next_item()
-        elseif luasnip.expand_or_jumpable() then
-          luasnip.expand_or_jump()
+        -- elseif luasnip.expand_or_jumpable() then
+        --   luasnip.expand_or_jump()
         else
           fallback()
         end
@@ -230,6 +233,39 @@ lua <<EOF
 
   local nvim_lsp = require('lspconfig')
 
+  vim.diagnostic.config({
+    signs = {
+      active = true,
+    },
+    virtual_text = true,
+    signs = true,
+    underline = false,
+    update_in_insert = true,
+    severity_sort = true,
+    float = {
+      focusable = false,
+      style = "minimal",
+      border = "rounded",
+      source = "always",
+      header = "",
+      prefix = "",
+      format = function(d)
+        local t = vim.deepcopy(d)
+        local code = d.code or (d.user_data and d.user_data.lsp.code)
+        if code then
+          t.message = string.format("%s [%s]", t.message, code):gsub("1. ", "")
+        end
+        return t.message
+      end,
+    },
+  })
+
+  local signs = { Error = " ", Warn = " ", Hint = " ", Info = " " }
+  for type, icon in pairs(signs) do
+    local hl = "DiagnosticSign" .. type
+    vim.fn.sign_define(hl, { text = icon, texthl = hl, numhl = hl })
+  end
+
   -- Use an on_attach function to only map the following keys
   -- after the language server attaches to the current buffer
   local on_attach = function(client, bufnr)
@@ -260,6 +296,19 @@ lua <<EOF
     buf_set_keymap('n', ']d', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
     buf_set_keymap('n', '<space>q', '<cmd>lua vim.diagnostic.setloclist()<CR>', opts)
     buf_set_keymap('n', '<space>f', '<cmd>lua vim.lsp.buf.formatting()<CR>', opts)
+
+    if client.resolved_capabilities.document_highlight then
+        vim.cmd [[
+          hi! LspReferenceRead guibg=#373737
+          hi! LspReferenceText guibg=#373737
+          hi! LspReferenceWrite guibg=#373737
+          augroup lsp_document_highlight
+            autocmd! * <buffer>
+            autocmd! CursorHold <buffer> lua vim.lsp.buf.document_highlight()
+            autocmd! CursorMoved <buffer> lua vim.lsp.buf.clear_references()
+          augroup END
+        ]]
+    end
 
   end
 
@@ -555,15 +604,15 @@ let g:nvim_tree_icons = {
     \   }
     \ }
 
-nnoremap <C-n> :NvimTreeToggle<CR>
+nnoremap <leader>e :NvimTreeToggle<CR>
 " nnoremap <leader>r :NvimTreeRefresh<CR>
-" nnoremap <leader>n :NvimTreeFindFile<CR>
+nnoremap <leader>ff :NvimTreeFindFile<CR>
 " NvimTreeOpen, NvimTreeClose, NvimTreeFocus, NvimTreeFindFileToggle, and NvimTreeResize are also available if you need them
 
 set termguicolors " this variable must be enabled for colors to be applied properly
 
 " a list of groups can be found at `:help nvim_tree_highlight`
-highlight NvimTreeWindowPicker guibg=#494949
+highlight NvimTreeNormal guibg=#303030
 
 lua <<EOF
   require'nvim-tree'.setup {

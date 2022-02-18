@@ -58,6 +58,8 @@ Plug 'lewis6991/gitsigns.nvim'
 Plug 'nvim-treesitter/nvim-treesitter', {'do': ':TSUpdate'}
 Plug 'folke/trouble.nvim'
 Plug 'github/copilot.vim'
+Plug 'simrat39/symbols-outline.nvim'
+" Plug 'nanozuki/tabby.nvim'
 " Plug 'chentau/marks.nvim'
 " Plug 'google/yapf', { 'rtp': 'plugins/vim', 'for': 'python' }
 " Plug 'tell-k/vim-autopep8'
@@ -105,8 +107,36 @@ colorscheme darcula
 set termguicolors
 
 lua <<EOF
+vim.g.symbols_outline = {
+  auto_preview = false,
+}
+-- require("tabby").setup({
+--   tabline = require("tabby.presets").tab_only,
+-- })
 require("trouble").setup {}
 require('feline').setup()
+local darcula = {
+    bg = '#353535',
+    black = '#353535',
+}
+require('feline').use_theme(darcula)
+
+require'nvim-web-devicons'.setup {
+ -- your personnal icons can go here (to override)
+ -- you can specify color or cterm_color instead of specifying both of them
+ -- DevIcon will be appended to `name`
+ override = {
+  markdown = {
+    icon = "",
+    color = "#428850",
+    cterm_color = "65",
+    name = "Markdown",
+  }
+ };
+ -- globally enable default icons (default to false)
+ -- will get overriden by `get_icons` option
+ -- default = true;
+}
 -- require'marks'.setup {
 --   -- whether to map keybinds or not. default true
 --   default_mappings = true,
@@ -310,6 +340,13 @@ lua <<EOF
         ]]
     end
 
+    if client.resolved_capabilities.document_formatting then
+      vim.cmd [[augroup Format]]
+      vim.cmd [[autocmd! * <buffer>]]
+      vim.cmd [[autocmd BufWritePre <buffer> lua vim.lsp.buf.formatting_sync()]]
+      vim.cmd [[augroup END]]
+    end
+
   end
 
   -- Register a handler that will be called for each installed server when it's ready (i.e. when installation is finished
@@ -360,6 +397,11 @@ lua <<EOF
   --   },
   -- }
 EOF
+
+" Trouble
+nnoremap gR <cmd>Trouble lsp_references<CR>
+nnoremap <leader>xd <cmd>Trouble document_diagnostics<CR>
+nnoremap <leader>xx <cmd>TroubleToggle<CR>
 
 " Goyo Setup {{{
 let g:goyo_margin_top = 2
@@ -530,6 +572,10 @@ hi GitSignsAdd guifg=#294436
 hi GitSignsChange guifg=#303C47
 hi GitSignsDelete guifg=#484A4A
 
+" hi Pmenu guifg=#66b3ff guibg=#262626
+
+command! SyntaxGroup echo map(synstack(line('.'), col('.')), 'synIDattr(v:val, "name")')
+
 " hi Search guibg=bg guifg=fg
 let g:vim_search_pulse_mode = 'pattern'
 " let g:vim_search_pulse_color_list = ['#ffff1a', '#ffff33', '#ffff33', '#ffff33', '#ffff33']
@@ -565,7 +611,7 @@ let g:nvim_tree_window_picker_exclude = {
 " Dictionary of buffer option names mapped to a list of option values that
 " indicates to the window picker that the buffer's window should not be
 " selectable.
-" let g:nvim_tree_special_files = { 'README.md': 1, 'Makefile': 1, 'MAKEFILE': 1 } " List of filenames that gets highlighted with NvimTreeSpecialFile
+let g:nvim_tree_special_files = {} " List of filenames that gets highlighted with NvimTreeSpecialFile
 " let g:nvim_tree_show_icons = {
 "     \ 'git': 1,
 "     \ 'folders': 0,
@@ -604,7 +650,7 @@ let g:nvim_tree_icons = {
     \   }
     \ }
 
-nnoremap <leader>e :NvimTreeToggle<CR>
+nnoremap <leader>ex :NvimTreeToggle<CR>
 " nnoremap <leader>r :NvimTreeRefresh<CR>
 nnoremap <leader>ff :NvimTreeFindFile<CR>
 " NvimTreeOpen, NvimTreeClose, NvimTreeFocus, NvimTreeFindFileToggle, and NvimTreeResize are also available if you need them
@@ -654,3 +700,5 @@ require'nvim-treesitter.configs'.setup {
   },
 }
 EOF
+
+nmap ,cl :let @*=expand("%:p")<CR>

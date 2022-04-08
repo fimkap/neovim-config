@@ -59,8 +59,13 @@ Plug 'nvim-treesitter/nvim-treesitter', {'do': ':TSUpdate'}
 Plug 'folke/trouble.nvim'
 Plug 'github/copilot.vim'
 Plug 'simrat39/symbols-outline.nvim'
+Plug 'tami5/lspsaga.nvim'
+Plug 'gfanto/fzf-lsp.nvim'
 " Plug 'nanozuki/tabby.nvim'
-" Plug 'chentau/marks.nvim'
+Plug 'chentau/marks.nvim'
+Plug 'mtdl9/vim-log-highlighting'
+Plug 'tpope/vim-unimpaired'
+Plug 'SmiteshP/nvim-gps'
 " Plug 'google/yapf', { 'rtp': 'plugins/vim', 'for': 'python' }
 " Plug 'tell-k/vim-autopep8'
 " Plug 'sheerun/vim-polyglot'
@@ -99,7 +104,7 @@ set mouse=a
 set hid
 " enable max 100000 scrollback size in terminal
 set scrollback=-1
-set shortmess+=c
+set shortmess+=cI
 set guicursor=n:hor10,i-ci-ve:ver25
 " colorscheme apprentice
 colorscheme darcula
@@ -107,6 +112,15 @@ colorscheme darcula
 set termguicolors
 
 lua <<EOF
+require("nvim-gps").setup()
+require('lspsaga').setup {
+  code_action_prompt = {
+    enable = false,
+    sign = true,
+    sign_priority = 40,
+    virtual_text = true,
+  },
+  }
 vim.g.symbols_outline = {
   auto_preview = false,
 }
@@ -137,37 +151,26 @@ require'nvim-web-devicons'.setup {
  -- will get overriden by `get_icons` option
  -- default = true;
 }
--- require'marks'.setup {
---   -- whether to map keybinds or not. default true
---   default_mappings = true,
---   -- which builtin marks to show. default {}
---   builtin_marks = { ".", "<", ">", "^" },
---   -- whether movements cycle back to the beginning/end of buffer. default true
---   cyclic = true,
---   -- whether the shada file is updated after modifying uppercase marks. default false
---   force_write_shada = false,
---   -- how often (in ms) to redraw signs/recompute mark positions. 
---   -- higher values will have better performance but may cause visual lag, 
---   -- while lower values may cause performance penalties. default 150.
---   refresh_interval = 250,
---   -- sign priorities for each type of mark - builtin marks, uppercase marks, lowercase
---   -- marks, and bookmarks.
---   -- can be either a table with all/none of the keys, or a single number, in which case
---   -- the priority applies to all marks.
---   -- default 10.
---   sign_priority = { lower=10, upper=15, builtin=8, bookmark=20 },
---   -- disables mark tracking for specific filetypes. default {}
---   excluded_filetypes = {},
---   -- marks.nvim allows you to configure up to 10 bookmark groups, each with its own
---   -- sign/virttext. Bookmarks can be used to group together positions and quickly move
---   -- across multiple buffers. default sign is '!@#$%^&*()' (from 0 to 9), and
---   -- default virt_text is "".
---   bookmark_0 = {
---     sign = "",
---     virt_text = "Note"
---   },
---   mappings = {}
--- }
+require'marks'.setup {
+  default_mappings = false,
+  sign_priority = { lower=10, upper=15, builtin=8, bookmark=20 },
+  excluded_filetypes = {},
+  -- marks.nvim allows you to configure up to 10 bookmark groups, each with its own
+  -- sign/virttext. Bookmarks can be used to group together positions and quickly move
+  -- across multiple buffers. default sign is '!@#$%^&*()' (from 0 to 9), and
+  -- default virt_text is "".
+  bookmark_0 = {
+    sign = "",
+    virt_text = ""
+  },
+  mappings = {
+    set_bookmark0 = "mm",
+    delete_bookmark = "mx",
+    next_bookmark0 = "[r",
+    prev_bookmark0 = "]r",
+    annotate = "mt",
+  },
+}
 require('gitsigns').setup {
   signs = {
     add          = {hl = 'GitSignsAdd'   , text = '▍', numhl='GitSignsAddNr'   , linehl='GitSignsAddLn'},
@@ -180,8 +183,9 @@ require('gitsigns').setup {
 EOF
 
 " marks options
-" highlight MarkSignHL guifg=#1922cf
-" highlight MarkSignNumHL guifg=#1922cf
+highlight MarkSignHL guifg=yellow
+highlight MarkSignNumHL guifg=#ffff99
+highlight MarkVirtTextHL guifg=#ffff99
 
 lua <<EOF
   -- Setup nvim-cmp.
@@ -318,7 +322,7 @@ lua <<EOF
     buf_set_keymap('n', '<space>wr', '<cmd>lua vim.lsp.buf.remove_workspace_folder()<CR>', opts)
     buf_set_keymap('n', '<space>wl', '<cmd>lua print(vim.inspect(vim.lsp.buf.list_workspace_folders()))<CR>', opts)
     buf_set_keymap('n', '<space>D', '<cmd>lua vim.lsp.buf.type_definition()<CR>', opts)
-    buf_set_keymap('n', '<space>rn', '<cmd>lua vim.lsp.buf.rename()<CR>', opts)
+    -- buf_set_keymap('n', '<space>rn', '<cmd>lua vim.lsp.buf.rename()<CR>', opts)
     buf_set_keymap('n', '<space>ca', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
     buf_set_keymap('n', 'gr', '<cmd>lua vim.lsp.buf.references()<CR>', opts)
     buf_set_keymap('n', '<space>e', '<cmd>lua vim.diagnostic.open_float()<CR>', opts)
@@ -326,6 +330,8 @@ lua <<EOF
     buf_set_keymap('n', ']d', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
     buf_set_keymap('n', '<space>q', '<cmd>lua vim.diagnostic.setloclist()<CR>', opts)
     buf_set_keymap('n', '<space>f', '<cmd>lua vim.lsp.buf.formatting()<CR>', opts)
+    buf_set_keymap('n', '<space>rn', '<cmd>Lspsaga rename<CR>', opts)
+    buf_set_keymap('n', 'gx', '<cmd>Lspsaga code_action<CR>', opts)
 
     if client.resolved_capabilities.document_highlight then
         vim.cmd [[
@@ -415,6 +421,11 @@ nnoremap <Leader>do :windo diffoff<CR>
 
 command! -bang -nargs=* Find call fzf#vim#grep('rg --column --line-number --no-heading --fixed-strings --ignore-case --no-ignore --hidden --follow --glob "!.git/*" --color "always" '.shellescape(<q-args>), 1, <bang>0)
 
+command! -bang -nargs=* Rg
+  \ call fzf#vim#grep(
+  \   'rg -w --column --line-number --no-heading --color=always --smart-case '.<q-args>, 1,
+  \   fzf#vim#with_preview(), <bang>0)
+
 " nmap <Leader>gl :silent Glog -10 --<CR>:cwindow<CR>
 
 " highlight Matchmaker guibg=aquamarine1
@@ -429,6 +440,11 @@ hi NonText ctermfg=235
 " Terminal
 nnoremap <leader>te :below 15sp term:///bin/zsh<cr>i
 tnoremap <F1> <C-\><C-n>
+
+" Fugitive status
+nnoremap <F1> :G<CR>
+nnoremap <F12> ::WorkspaceSymbols<CR>
+nnoremap <leader>ds :DocumentSymbols<CR>
 
 vnoremap // y/<C-R>"<CR>
 
@@ -512,6 +528,8 @@ nnoremap <silent> <Leader>l        :Lines<CR>
 nnoremap <silent> <Leader>ag       :Ag <C-R><C-W><CR>
 nnoremap <silent> <Leader>AG       :Ag <C-R><C-A><CR>
 xnoremap <silent> <Leader>ag       y:Ag <C-R>"<CR>
+nnoremap <silent> <Leader>rg       :Rg <C-R><C-W><CR>
+xnoremap <silent> <Leader>rg       y:Rg <C-R>"<CR>
 nnoremap <silent> <Leader>`        :Marks<CR>
 " nnoremap <silent> q: :History:<CR>
 " nnoremap <silent> q/ :History/<CR>
@@ -548,7 +566,7 @@ let s:ag_options = ' --smart-case --word-regexp '
 command! -bang -nargs=+ -complete=dir Rag call fzf#vim#ag_raw(<q-args>, {'options': '--delimiter : --nth 4..'}, <bang>0)
 
 function! RipgrepFzf(query, fullscreen)
-  let command_fmt = 'rg --column --line-number --no-heading --color=always --smart-case %s || true'
+  let command_fmt = 'rg -w --column --line-number --no-heading --color=always --smart-case %s || true'
   let initial_command = printf(command_fmt, shellescape(a:query))
   let reload_command = printf(command_fmt, '{q}')
   let options = {'options': ['--phony', '--query', a:query, '--bind', 'change:reload:'.reload_command]}
@@ -702,3 +720,8 @@ require'nvim-treesitter.configs'.setup {
 EOF
 
 nmap ,cl :let @*=expand("%:p")<CR>
+imap <silent><script><expr> <C-J> copilot#Accept("")
+let g:copilot_no_tab_map = v:true
+
+hi DiffRemoved guifg=Red
+hi DiffAdded guifg=Green

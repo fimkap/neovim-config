@@ -170,6 +170,7 @@ require'marks'.setup {
     prev_bookmark0 = "]r",
     annotate = "mt",
   },
+  refresh_interval = 0, -- or some really large value to disable mark tracking
 }
 require('gitsigns').setup {
   signs = {
@@ -186,6 +187,8 @@ EOF
 highlight MarkSignHL guifg=yellow
 highlight MarkSignNumHL guifg=#ffff99
 highlight MarkVirtTextHL guifg=#ffff99
+
+au CursorHold * lua require'marks'.refresh()
 
 lua <<EOF
   -- Setup nvim-cmp.
@@ -349,7 +352,7 @@ lua <<EOF
     if client.resolved_capabilities.document_formatting then
       vim.cmd [[augroup Format]]
       vim.cmd [[autocmd! * <buffer>]]
-      vim.cmd [[autocmd BufWritePre <buffer> lua vim.lsp.buf.formatting_sync()]]
+      vim.cmd [[autocmd BufWritePre *.go lua vim.lsp.buf.formatting_sync()]]
       vim.cmd [[augroup END]]
     end
 

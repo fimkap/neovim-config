@@ -17,7 +17,6 @@ call plug#begin('~/.config/nvim/plugged')
 " Plugins {{{
 Plug 'tpope/vim-fugitive'
 " Plug 'tpope/vim-obsession'
-" Plug 'tpope/vim-unimpaired'
 " Plug 'tpope/vim-characterize'
 " Plug 'tpope/vim-surround'
 Plug 'tpope/vim-commentary'
@@ -26,16 +25,13 @@ Plug 'tpope/vim-repeat'
 " Plug 'junegunn/goyo.vim'
 " Plug 'tpope/vim-afterimage'
 Plug 'fimkap/vim-mark'
-Plug 'jacoborus/tender.vim'
 Plug 'rakr/vim-one'
 Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
 Plug 'junegunn/fzf.vim'
 Plug 'metakirby5/codi.vim'
 Plug 'inside/vim-search-pulse'
-" Plug 'ryanoasis/vim-devicons'
 Plug 'mhartington/oceanic-next'
-Plug 'EdenEast/nightfox.nvim'
-Plug 'famiu/feline.nvim'
+Plug 'feline-nvim/feline.nvim'
 Plug 'kyazdani42/nvim-web-devicons'
 Plug 'kyazdani42/nvim-tree.lua'
 Plug 'neovim/nvim-lspconfig'
@@ -43,7 +39,7 @@ Plug 'williamboman/nvim-lsp-installer'
 Plug 'hrsh7th/cmp-nvim-lsp'
 Plug 'hrsh7th/cmp-buffer'
 Plug 'hrsh7th/cmp-path'
-Plug 'hrsh7th/cmp-cmdline'
+" Plug 'hrsh7th/cmp-cmdline'
 Plug 'hrsh7th/nvim-cmp'
 " For vsnip users.
 " Plug 'hrsh7th/cmp-vsnip'
@@ -62,10 +58,16 @@ Plug 'simrat39/symbols-outline.nvim'
 Plug 'tami5/lspsaga.nvim'
 Plug 'gfanto/fzf-lsp.nvim'
 " Plug 'nanozuki/tabby.nvim'
-Plug 'chentau/marks.nvim'
+Plug 'chentoast/marks.nvim'
 Plug 'mtdl9/vim-log-highlighting'
 Plug 'tpope/vim-unimpaired'
 Plug 'SmiteshP/nvim-gps'
+Plug 'gorbit99/codewindow.nvim'
+Plug 'lifepillar/pgsql.vim'
+Plug 'chrisbra/csv.vim'
+Plug 'MunifTanjim/nui.nvim'
+Plug 'lukas-reineke/indent-blankline.nvim'
+" Plug 'edluffy/hologram.nvim'
 " Plug 'google/yapf', { 'rtp': 'plugins/vim', 'for': 'python' }
 " Plug 'tell-k/vim-autopep8'
 " Plug 'sheerun/vim-polyglot'
@@ -106,12 +108,22 @@ set hid
 set scrollback=-1
 set shortmess+=cI
 set guicursor=n:hor10,i-ci-ve:ver25
+set laststatus=3
 " colorscheme apprentice
 colorscheme darcula
 
 set termguicolors
 
 lua <<EOF
+local codewindow = require('codewindow')
+codewindow.setup()
+codewindow.apply_default_keybinds()
+
+require("indent_blankline").setup {
+    show_current_context = true,
+    show_current_context_start = true,
+}
+
 require("nvim-gps").setup()
 require('lspsaga').setup {
   code_action_prompt = {
@@ -128,12 +140,412 @@ vim.g.symbols_outline = {
 --   tabline = require("tabby.presets").tab_only,
 -- })
 require("trouble").setup {}
-require('feline').setup()
-local darcula = {
-    bg = '#353535',
-    black = '#353535',
+-- require('feline').setup()
+-- local darcula = {
+--     bg = '#353535',
+--     black = '#353535',
+-- }
+-- require('feline').use_theme(darcula)
+
+local lsp = require('feline.providers.lsp')
+local vi_mode_utils = require('feline.providers.vi_mode')
+local gps = require("nvim-gps")
+
+local force_inactive = {
+  filetypes = {},
+  buftypes = {},
+  bufnames = {}
 }
-require('feline').use_theme(darcula)
+
+local components = {
+  active = {{}, {}, {}},
+  inactive = {{}, {}, {}},
+}
+
+local colors = {
+  bg = '#282828',
+  black = '#282828',
+  yellow = '#d8a657',
+  cyan = '#89b482',
+  oceanblue = '#45707a',
+  green = '#a9b665',
+  orange = '#e78a4e',
+  violet = '#d3869b',
+  magenta = '#c14a4a',
+  white = '#a89984',
+  fg = '#a89984',
+  skyblue = '#7daea3',
+  red = '#ea6962',
+}
+
+local vi_mode_colors = {
+  NORMAL = 'green',
+  OP = 'green',
+  INSERT = 'red',
+  CONFIRM = 'red',
+  VISUAL = 'skyblue',
+  LINES = 'skyblue',
+  BLOCK = 'skyblue',
+  REPLACE = 'violet',
+  ['V-REPLACE'] = 'violet',
+  ENTER = 'cyan',
+  MORE = 'cyan',
+  SELECT = 'orange',
+  COMMAND = 'green',
+  SHELL = 'green',
+  TERM = 'green',
+  NONE = 'yellow'
+}
+
+local vi_mode_text = {
+  NORMAL = '<|',
+  OP = '<|',
+  INSERT = '|>',
+  VISUAL = '<>',
+  LINES = '<>',
+  BLOCK = '<>',
+  REPLACE = '<>',
+  ['V-REPLACE'] = '<>',
+  ENTER = '<>',
+  MORE = '<>',
+  SELECT = '<>',
+  COMMAND = '<|',
+  SHELL = '<|',
+  TERM = '<|',
+  NONE = '<>',
+  CONFIRM = '|>'
+}
+
+local buffer_not_empty = function()
+  if vim.fn.empty(vim.fn.expand('%:t')) ~= 1 then
+    return true
+  end
+  return false
+end
+
+local checkwidth = function()
+  local squeeze_width  = vim.fn.winwidth(0) / 2
+  if squeeze_width > 40 then
+    return true
+  end
+  return false
+end
+
+force_inactive.filetypes = {
+  'NvimTree',
+  'dbui',
+  'packer',
+  'startify',
+  'fugitive',
+  'fugitiveblame'
+}
+
+force_inactive.buftypes = {
+  'terminal'
+}
+
+-- LEFT
+
+-- vi-mode
+components.active[1][1] = {
+  provider = ' NV-IDE ',
+  hl = function()
+    local val = {}
+
+    val.bg = vi_mode_utils.get_mode_color()
+    val.fg = 'black'
+    val.style = 'bold'
+
+    return val
+  end,
+  right_sep = ' '
+}
+-- vi-symbol
+components.active[1][2] = {
+  provider = function()
+    return vi_mode_text[vi_mode_utils.get_vim_mode()]
+  end,
+  hl = function()
+    local val = {}
+    val.fg = vi_mode_utils.get_mode_color()
+    val.bg = 'bg'
+    val.style = 'bold'
+    return val
+  end,
+  right_sep = ' '
+}
+-- filename
+components.active[1][3] = {
+  provider = function()
+    return vim.fn.expand("%:F")
+  end,
+  hl = {
+    fg = 'white',
+    bg = 'bg',
+    style = 'bold'
+  },
+  right_sep = {
+    str = ' > ',
+    hl = {
+      fg = 'white',
+      bg = 'bg',
+      style = 'bold'
+    },
+  }
+}
+-- nvimGps
+components.active[1][4] = {
+  provider = function() return gps.get_location() end,
+  enabled = function() return gps.is_available() end,
+  hl = {
+    fg = 'white',
+    bg = 'bg',
+    style = 'bold'
+  }
+}
+
+-- MID
+
+-- gitBranch
+components.active[2][1] = {
+  provider = 'git_branch',
+  hl = {
+    fg = 'yellow',
+    bg = 'bg',
+    style = 'bold'
+  }
+}
+-- diffAdd
+components.active[2][2] = {
+  provider = 'git_diff_added',
+  hl = {
+    fg = 'green',
+    bg = 'bg',
+    style = 'bold'
+  }
+}
+-- diffModfified
+components.active[2][3] = {
+  provider = 'git_diff_changed',
+  hl = {
+    fg = 'orange',
+    bg = 'bg',
+    style = 'bold'
+  }
+}
+-- diffRemove
+components.active[2][4] = {
+  provider = 'git_diff_removed',
+  hl = {
+    fg = 'red',
+    bg = 'bg',
+    style = 'bold'
+  },
+}
+-- diagnosticErrors
+components.active[2][5] = {
+  provider = 'diagnostic_errors',
+  enabled = function() return lsp.diagnostics_exist(vim.diagnostic.severity.ERROR) end,
+  hl = {
+    fg = 'red',
+    style = 'bold'
+  }
+}
+-- diagnosticWarn
+components.active[2][6] = {
+  provider = 'diagnostic_warnings',
+  enabled = function() return lsp.diagnostics_exist(vim.diagnostic.severity.WARN) end,
+  hl = {
+    fg = 'yellow',
+    style = 'bold'
+  }
+}
+-- diagnosticHint
+components.active[2][7] = {
+  provider = 'diagnostic_hints',
+  enabled = function() return lsp.diagnostics_exist(vim.diagnostic.severity.HINT) end,
+  hl = {
+    fg = 'cyan',
+    style = 'bold'
+  }
+}
+-- diagnosticInfo
+components.active[2][8] = {
+  provider = 'diagnostic_info',
+  enabled = function() return lsp.diagnostics_exist(vim.diagnostic.severity.INFO) end,
+  hl = {
+    fg = 'skyblue',
+    style = 'bold'
+  }
+}
+
+-- RIGHT
+
+-- LspName
+components.active[3][1] = {
+  provider = 'lsp_client_names',
+  hl = {
+    fg = 'yellow',
+    bg = 'bg',
+    style = 'bold'
+  },
+  right_sep = ' '
+}
+-- fileIcon
+components.active[3][2] = {
+  provider = function()
+    local filename = vim.fn.expand('%:t')
+    local extension = vim.fn.expand('%:e')
+    local icon  = require'nvim-web-devicons'.get_icon(filename, extension)
+    if icon == nil then
+      icon = ''
+    end
+    return icon
+  end,
+  hl = function()
+    local val = {}
+    local filename = vim.fn.expand('%:t')
+    local extension = vim.fn.expand('%:e')
+    local icon, name  = require'nvim-web-devicons'.get_icon(filename, extension)
+    if icon ~= nil then
+      val.fg = vim.fn.synIDattr(vim.fn.hlID(name), 'fg')
+    else
+      val.fg = 'white'
+    end
+    val.bg = 'bg'
+    val.style = 'bold'
+    return val
+  end,
+  right_sep = ' '
+}
+-- fileType
+components.active[3][3] = {
+  provider = 'file_type',
+  hl = function()
+    local val = {}
+    local filename = vim.fn.expand('%:t')
+    local extension = vim.fn.expand('%:e')
+    local icon, name  = require'nvim-web-devicons'.get_icon(filename, extension)
+    if icon ~= nil then
+      val.fg = vim.fn.synIDattr(vim.fn.hlID(name), 'fg')
+    else
+      val.fg = 'white'
+    end
+    val.bg = 'bg'
+    val.style = 'bold'
+    return val
+  end,
+  right_sep = ' '
+}
+-- fileSize
+components.active[3][4] = {
+  provider = 'file_size',
+  enabled = function() return vim.fn.getfsize(vim.fn.expand('%:t')) > 0 end,
+  hl = {
+    fg = 'skyblue',
+    bg = 'bg',
+    style = 'bold'
+  },
+  right_sep = ' '
+}
+-- fileFormat
+components.active[3][5] = {
+  provider = function() return '' .. vim.bo.fileformat:upper() .. '' end,
+  hl = {
+    fg = 'white',
+    bg = 'bg',
+    style = 'bold'
+  },
+  right_sep = ' '
+}
+-- fileEncode
+components.active[3][6] = {
+  provider = 'file_encoding',
+  hl = {
+    fg = 'white',
+    bg = 'bg',
+    style = 'bold'
+  },
+  right_sep = ' '
+}
+-- RVMrubyVersion
+-- components.active[3][7] = {
+--   provider = function()
+--     return ' '..vim.fn['rvm#string']()
+--   end,
+--   hl = {
+--     fg = 'red',
+--     bg = 'bg',
+--     style = 'bold'
+--   },
+--   right_sep = ' '
+-- }
+-- lineInfo
+components.active[3][8] = {
+  provider = 'position',
+  hl = {
+    fg = 'white',
+    bg = 'bg',
+    style = 'bold'
+  },
+  right_sep = ' '
+}
+-- linePercent
+components.active[3][9] = {
+  provider = 'line_percentage',
+  hl = {
+    fg = 'white',
+    bg = 'bg',
+    style = 'bold'
+  },
+  right_sep = ' '
+}
+-- scrollBar
+components.active[3][10] = {
+  provider = 'scroll_bar',
+  hl = {
+    fg = 'yellow',
+    bg = 'bg',
+  },
+}
+
+-- INACTIVE
+
+-- fileType
+components.inactive[1][1] = {
+  provider = 'file_type',
+  hl = {
+    fg = 'black',
+    bg = 'cyan',
+    style = 'bold'
+  },
+  left_sep = {
+    str = ' ',
+    hl = {
+      fg = 'NONE',
+      bg = 'cyan'
+    }
+  },
+  right_sep = {
+    {
+      str = ' ',
+      hl = {
+        fg = 'NONE',
+        bg = 'cyan'
+      }
+    },
+    ' '
+  }
+}
+
+require('feline').setup({
+  theme = colors,
+  default_bg = bg,
+  default_fg = fg,
+  vi_mode_colors = vi_mode_colors,
+  components = components,
+  force_inactive = force_inactive,
+})
 
 require'nvim-web-devicons'.setup {
  -- your personnal icons can go here (to override)
@@ -174,13 +586,82 @@ require'marks'.setup {
 }
 require('gitsigns').setup {
   signs = {
-    add          = {hl = 'GitSignsAdd'   , text = '▍', numhl='GitSignsAddNr'   , linehl='GitSignsAddLn'},
-    change       = {hl = 'GitSignsChange', text = '▍', numhl='GitSignsChangeNr', linehl='GitSignsChangeLn'},
+    add          = {hl = 'GitSignsAdd'   , text = '▐', numhl='GitSignsAddNr'   , linehl='GitSignsAddLn'},
+    change       = {hl = 'GitSignsChange', text = '▐', numhl='GitSignsChangeNr', linehl='GitSignsChangeLn'},
     delete       = {hl = 'GitSignsDelete', text = '▂', numhl='GitSignsDeleteNr', linehl='GitSignsDeleteLn'},
     topdelete    = {hl = 'GitSignsDelete', text = '▔', numhl='GitSignsDeleteNr', linehl='GitSignsDeleteLn'},
     changedelete = {hl = 'GitSignsChange', text = '﬌', numhl='GitSignsChangeNr', linehl='GitSignsChangeLn'},
     },
-  }
+    numhl      = false, -- Toggle with `:Gitsigns toggle_numhl`
+    linehl     = false, -- Toggle with `:Gitsigns toggle_linehl`
+    word_diff  = true, -- Toggle with `:Gitsigns toggle_word_diff`
+    watch_gitdir = {
+      interval = 1000,
+      follow_files = true
+    },
+    attach_to_untracked = true,
+    current_line_blame = false, -- Toggle with `:Gitsigns toggle_current_line_blame`
+    current_line_blame_opts = {
+      virt_text = true,
+      virt_text_pos = 'eol', -- 'eol' | 'overlay' | 'right_align'
+      delay = 1000,
+      ignore_whitespace = false,
+    },
+    current_line_blame_formatter = '<author>, <author_time:%Y-%m-%d> - <summary>',
+    sign_priority = 6,
+    update_debounce = 100,
+    status_formatter = nil, -- Use default
+    max_file_length = 40000,
+    preview_config = {
+      -- Options passed to nvim_open_win
+      border = 'single',
+      style = 'minimal',
+      relative = 'cursor',
+      row = 0,
+      col = 1
+    },
+    yadm = {
+      enable = false
+    },
+  on_attach = function(bufnr)
+    local gs = package.loaded.gitsigns
+
+    local function map(mode, l, r, opts)
+      opts = opts or {}
+      opts.buffer = bufnr
+      vim.keymap.set(mode, l, r, opts)
+    end
+
+    -- Navigation
+    map('n', ']c', function()
+      if vim.wo.diff then return ']c' end
+      vim.schedule(function() gs.next_hunk() end)
+      return '<Ignore>'
+    end, {expr=true})
+
+    map('n', '[c', function()
+      if vim.wo.diff then return '[c' end
+      vim.schedule(function() gs.prev_hunk() end)
+      return '<Ignore>'
+    end, {expr=true})
+
+    -- Actions
+    map({'n', 'v'}, '<leader>hs', ':Gitsigns stage_hunk<CR>')
+    map({'n', 'v'}, '<leader>hr', ':Gitsigns reset_hunk<CR>')
+    map('n', '<leader>hS', gs.stage_buffer)
+    map('n', '<leader>hu', gs.undo_stage_hunk)
+    map('n', '<leader>hR', gs.reset_buffer)
+    map('n', '<leader>hp', gs.preview_hunk)
+    map('n', '<leader>hb', function() gs.blame_line{full=true} end)
+    map('n', '<leader>tb', gs.toggle_current_line_blame)
+    map('n', '<leader>hd', gs.diffthis)
+    map('n', '<leader>hD', function() gs.diffthis('~') end)
+    map('n', '<leader>td', gs.toggle_deleted)
+
+    -- Text object
+    map({'o', 'x'}, 'ih', ':<C-U>Gitsigns select_hunk<CR>')
+  end
+}
 EOF
 
 " marks options
@@ -249,23 +730,24 @@ lua <<EOF
   })
 
   -- Use buffer source for `/` (if you enabled `native_menu`, this won't work anymore).
-  cmp.setup.cmdline('/', {
-    sources = {
-      { name = 'buffer' }
-    }
-  })
+  -- cmp.setup.cmdline('/', {
+  --   sources = {
+  --     { name = 'buffer' }
+  --   }
+  -- })
 
   -- Use cmdline & path source for ':' (if you enabled `native_menu`, this won't work anymore).
-  cmp.setup.cmdline(':', {
-    sources = cmp.config.sources({
-      { name = 'path' }
-    }, {
-      { name = 'cmdline' }
-    })
-  })
+  -- cmp.setup.cmdline(':', {
+  --   sources = cmp.config.sources({
+  --     { name = 'path' }
+  --   }, {
+  --     { name = 'cmdline' }
+  --   })
+  -- })
 
   -- Setup lspconfig.
-  local capabilities = require('cmp_nvim_lsp').update_capabilities(vim.lsp.protocol.make_client_capabilities())
+  local capabilities = require('cmp_nvim_lsp').default_capabilities()
+  -- local capabilities = require('cmp_nvim_lsp').update_capabilities(vim.lsp.protocol.make_client_capabilities())
   local lsp_installer = require("nvim-lsp-installer")
 
   local nvim_lsp = require('lspconfig')
@@ -296,6 +778,19 @@ lua <<EOF
       end,
     },
   })
+
+--  require'lspconfig'.sqls.setup{
+--    settings = {
+--      sqls = {
+--        connections = {
+--          {
+--            driver = 'postgresql',
+--            dataSourceName = 'host=0.0.0.0 port=54320 user=postgres dbname=apsalar password=singular sslmode=disable',
+--          },
+--        },
+--      },
+--    },
+--  }
 
   local signs = { Error = " ", Warn = " ", Hint = " ", Info = " " }
   for type, icon in pairs(signs) do
@@ -332,11 +827,11 @@ lua <<EOF
     buf_set_keymap('n', '[d', '<cmd>lua vim.diagnostic.goto_prev()<CR>', opts)
     buf_set_keymap('n', ']d', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
     buf_set_keymap('n', '<space>q', '<cmd>lua vim.diagnostic.setloclist()<CR>', opts)
-    buf_set_keymap('n', '<space>f', '<cmd>lua vim.lsp.buf.formatting()<CR>', opts)
+    buf_set_keymap('n', '<space>f', '<cmd>lua vim.lsp.buf.format { async = true }<CR>', opts)
     buf_set_keymap('n', '<space>rn', '<cmd>Lspsaga rename<CR>', opts)
     buf_set_keymap('n', 'gx', '<cmd>Lspsaga code_action<CR>', opts)
 
-    if client.resolved_capabilities.document_highlight then
+    if client.server_capabilities.documentHighlightProvider then
         vim.cmd [[
           hi! LspReferenceRead guibg=#373737
           hi! LspReferenceText guibg=#373737
@@ -349,10 +844,10 @@ lua <<EOF
         ]]
     end
 
-    if client.resolved_capabilities.document_formatting then
+    if client.server_capabilities.documentFormattingProvider then
       vim.cmd [[augroup Format]]
       vim.cmd [[autocmd! * <buffer>]]
-      vim.cmd [[autocmd BufWritePre *.go lua vim.lsp.buf.formatting_sync()]]
+      vim.cmd [[autocmd BufWritePre *.go lua vim.lsp.buf.format { async = false }]]
       vim.cmd [[augroup END]]
     end
 
@@ -405,6 +900,12 @@ lua <<EOF
   --     },
   --   },
   -- }
+  require('lspconfig')['pyright'].setup {
+    capabilities = capabilities
+  }
+  require('lspconfig')['gopls'].setup {
+    capabilities = capabilities
+  }
 EOF
 
 " Trouble
@@ -492,7 +993,8 @@ command! -nargs=? -complete=dir AF
   \   'source': 'fd --type f --hidden --follow --exclude .git --no-ignore . '.expand(<q-args>)
   \ })))
 
-let g:fzf_layout = { 'window': { 'width': 0.9, 'height': 0.6 } }
+let g:fzf_layout = { 'window': { 'width': 0.9, 'height': 0.8 } }
+let g:fzf_preview_window = ['up,60%','ctrl-a']
 let g:fzf_colors =
 \ { 'fg':      ['fg', 'Normal'],
   \ 'bg':      ['bg', 'Normal'],
@@ -519,7 +1021,7 @@ command! -bang -nargs=? -complete=dir GFiles
 
 autocmd! FileType fzf
 autocmd  FileType fzf set laststatus=0 noshowmode noruler
-  \| autocmd BufLeave <buffer> set laststatus=2 showmode ruler
+  \| autocmd BufLeave <buffer> set laststatus=3 showmode ruler
 
 " command! Ag call fzf#vim#ag('query', {'options': '--bind ctrl-a:select-all,ctrl-d:deselect-all'})
 
@@ -573,7 +1075,7 @@ function! RipgrepFzf(query, fullscreen)
   let initial_command = printf(command_fmt, shellescape(a:query))
   let reload_command = printf(command_fmt, '{q}')
   let options = {'options': ['--phony', '--query', a:query, '--bind', 'change:reload:'.reload_command]}
-  let options = fzf#vim#with_preview(options, 'right', 'ctrl-/')
+  let options = fzf#vim#with_preview(options, 'down', 'ctrl-/')
   call fzf#vim#grep(initial_command, 1, options, a:fullscreen)
 endfunction
 
@@ -682,49 +1184,30 @@ set termguicolors " this variable must be enabled for colors to be applied prope
 highlight NvimTreeNormal guibg=#303030
 
 lua <<EOF
-  require'nvim-tree'.setup {
-    show_icons = {
-      git = 1,
-      folders = 1,
-      files = 1,
-      folder_arrows = 1,
-      tree_width = 30,
-      },
-    quit_on_open = 0,
-    git_hl = 1,
-    }
+  require'nvim-tree'.setup {}
 EOF
 
 lua <<EOF
-require'nvim-treesitter.configs'.setup {
-  -- One of "all", "maintained" (parsers with maintainers), or a list of languages
-  ensure_installed = "maintained",
-
-  -- Install languages synchronously (only applied to `ensure_installed`)
-  sync_install = false,
-
-  -- List of parsers to ignore installing
-  ignore_install = { "haskell" },
-
-  highlight = {
-    -- `false` will disable the whole extension
-    enable = true,
-
-    -- list of language that will be disabled
-    disable = {},
-
-    -- Setting this to true will run `:h syntax` and tree-sitter at the same time.
-    -- Set this to `true` if you depend on 'syntax' being enabled (like for indentation).
-    -- Using this option may slow down your editor, and you may see some duplicate highlights.
-    -- Instead of true it can also be a list of languages
-    additional_vim_regex_highlighting = false,
-  },
-}
+require'nvim-treesitter.configs'.setup{highlight={enable=true}}
 EOF
 
 nmap ,cl :let @*=expand("%:p")<CR>
+nmap ,cn :let @*=expand("%:t")<CR>
+
 imap <silent><script><expr> <C-J> copilot#Accept("")
 let g:copilot_no_tab_map = v:true
+imap <C-n> <Plug>(copilot-next)
+imap <C-p> <Plug>(copilot-previous)
+imap <C-\> <Plug>(copilot-suggest)
 
 hi DiffRemoved guifg=Red
 hi DiffAdded guifg=Green
+
+autocmd FileType sql setlocal commentstring=--%s
+
+let g:sql_type_default = 'pgsql'
+
+nnoremap <leader>ll :Files /tmp/attribution/logs<CR>
+nnoremap <leader>hi :History<CR>
+
+let g:indent_blankline_enabled = v:false
